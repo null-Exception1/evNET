@@ -18,6 +18,8 @@ class Neuron:
         number_of_input_chemicals: int = 4,
         number_of_output_chemicals: int = 4,
         hidden_size: int = 4,
+        target_rate: float = 0.1,
+        homeostasis_tau: float = 0.01,
     ):
         self.pos = pos
         self.color = color
@@ -64,6 +66,9 @@ class Neuron:
         self.incoming = []
         self.last_fire_signal = 0.0   # raw a2[0], handy for debugging
 
+        self.target_rate = target_rate         # desired long-run firing rate
+        self.rate_estimate = target_rate        # running estimate, starts at target
+        self.homeostasis_tau = homeostasis_tau     # how fast the threshold adapts (slow!)
     @staticmethod
     def sigmoid(x):
         return 1.0 / (1.0 + np.exp(-x))
@@ -106,13 +111,13 @@ class Neuron:
         }
 
     def add_synapse(self, target: Neuron, weight: float, delay: int = 1):
-      if target is self:
-          return
-      if any(s.receiver is target for s in self.outgoing_synapses):
-          return
-      s = Synapse(weight, self, target, delay)
-      self.outgoing_synapses.append(s)
-      target.incoming_synapses.append(s)
+        if target is self:
+            return
+        if any(s.receiver is target for s in self.outgoing_synapses):
+            return
+        s = Synapse(weight, self, target, delay)
+        self.outgoing_synapses.append(s)
+        target.incoming_synapses.append(s)
 
     def delete_synapse(self, target: Neuron):
         doomed = [s for s in self.outgoing_synapses if s.receiver is target]
@@ -120,7 +125,7 @@ class Neuron:
             s for s in self.outgoing_synapses if s.receiver is not target
         ]
         for s in doomed:
-            target.incoming_synapses.remove(s)   # remove from BOTH lists
+            target.incoming_synapses.remove(s)
 
     def push_synapse_inputs_to_neuron(self):
         self.incoming = [s.weight if s.spike else 0.0 for s in self.incoming_synapses]
@@ -129,16 +134,17 @@ class Neuron:
         drive = sum(self.incoming)
         self.potential = self.potential * self.potential_leak + drive
 
-        noise = self.rng.normal(0.0, 0.05, size=self.chem_inputs.shape)
-        noisy_chem = self.chem_inputs + noise
-
-        x = np.concatenate(([self.potential, self.spike_trace], noisy_chem))
+        x = np.concatenate(([self.potential, self.spike_trace], self.chem_inputs))
         a2 = self._forward(x)
         self.last_fire_signal = float(a2[0])
 
         fired = bool(a2[0] > self.threshold)
         if fired:
             self.potential = 0.0
+
+        self.rate_estimate = self.rate_estimate * 0.99 + float(fired) * 0.01
+        self.threshold += self.homeostasis_tau * (self.rate_estimate - self.target_rate)
+
         self.spike_trace = self.spike_trace * self.spike_leak + float(fired)
 
         release = a2[1:] if fired else np.zeros_like(a2[1:])

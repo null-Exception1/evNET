@@ -70,9 +70,6 @@ def log(msg):
 def brain_tick(kick=False):
     """One full network step: advance the wires, read arrivals, send new spikes."""
     global tick
-    
-    for s in all_synapses:
-        s.advance()
         
     if kick:
         i = random.randrange(N_NEURONS)
@@ -81,10 +78,11 @@ def brain_tick(kick=False):
         log(f"kick -> neuron {i}")
 
     for n in neurons:
-        n.process() 
-
+        n.process()
     for n in neurons:
-        n.forward() 
+        n.forward()
+    for s in all_synapses:
+        s.advance()
 
     for i, n in enumerate(neurons):
         fire_history[i].append(1 if n.fired else 0)
@@ -165,7 +163,7 @@ while running:
         step = 1.0 / TICKS_PER_SECOND
         while tick_timer >= step:
             tick_timer -= step
-            kick = KICK_EVERY > 0 and tick % KICK_EVERY == 0
+            kick = False
             brain_tick(kick=kick)
 
     # ---------------- draw ----------------
