@@ -19,7 +19,10 @@ class Neuron:
         number_of_output_chemicals: int = 4,
         hidden_size: int = 4,
         target_rate: float = 0.1,
-        homeostasis_tau: float = 0.01,
+        homeostasis_tau: float = 0.05,
+        is_input_neuron: bool = False,
+        is_output_neuron: bool = False,
+        is_inhibitory: bool = False,
     ):
         self.pos = pos
         self.color = color
@@ -38,9 +41,9 @@ class Neuron:
         self.number_of_input_chemicals = number_of_input_chemicals
         self.number_of_output_chemicals = number_of_output_chemicals
 
-        # FFN input:  [potential, spike_trace, chem_1..chem_n]
+        # FFN input:  [potential, chem_1..chem_n]
         # FFN output: [fire_decision, release_1..release_m]
-        self.n_in = 2 + number_of_input_chemicals
+        self.n_in = 1 + number_of_input_chemicals
         self.n_out = 1 + number_of_output_chemicals
 
         self.W1 = self.rng.standard_normal((self.n_in, hidden_size))
@@ -48,7 +51,7 @@ class Neuron:
         self.W2 = self.rng.standard_normal((hidden_size, self.n_out))
         self.B2 = self.rng.standard_normal(self.n_out)
 
-        # --- make firing respond UPWARD to the potential ---
+        # make firing respond UPWARD to the potential
         # potential -> hidden weights positive (and amplified), hidden -> fire output positive.
         # sigmoid is monotonic, so higher potential can now only raise the fire signal.
         self.W1[0, :] = np.abs(self.W1[0, :]) * input_gain
@@ -59,6 +62,13 @@ class Neuron:
         self.threshold_margin = threshold_margin
         self.threshold = 0.0        # set by recalibrate()
         self.recalibrate()
+        
+        sustain_floor = self._fire_signal(0.0, 1.0)      # raw output at trace=1.0, potential=0
+        self.min_threshold = sustain_floor + 0.02
+
+        fireable_ceiling = self._fire_signal(3.0, 0.0)   # raw output at a strong potential, trace=0
+        self.max_threshold = fireable_ceiling - 0.02
+        self.threshold = float(np.clip(self.threshold, self.min_threshold, self.max_threshold))
 
         self.fired = False
         self.chem_inputs = np.zeros(number_of_input_chemicals)
@@ -68,25 +78,33 @@ class Neuron:
 
         self.target_rate = target_rate         # desired long-run firing rate
         self.rate_estimate = target_rate        # running estimate, starts at target
-        self.homeostasis_tau = homeostasis_tau     # how fast the threshold adapts (slow!)
+        self.homeostasis_tau = homeostasis_tau     # how fast the threshold adapts
+
+        self.is_input_neuron = is_input_neuron
+        self.is_output_neuron = is_output_neuron
+        self.is_inhibitory = is_inhibitory
+
+    
     @staticmethod
     def sigmoid(x):
         return 1.0 / (1.0 + np.exp(-x))
 
     def _forward(self, x):
-        """Run the FFN on an input vector, return the full output vector."""
+        """run the FFN on an input vector, return the full output vector."""
         a1 = self.sigmoid(x @ self.W1 + self.B1)
         return self.sigmoid(a1 @ self.W2 + self.B2)
 
     def _fire_signal(self, potential, spike_trace, chem=None):
-        """Fire output for a hypothetical input. Used for calibration and diagnostics."""
+        """fire output for a hypothetical input. used for diagnostics."""
         chem = np.zeros(self.number_of_input_chemicals) if chem is None else chem
-        x = np.concatenate(([potential, spike_trace], chem))
+        x = np.concatenate(([potential], chem))
         return float(self._forward(x)[0])
 
     def recalibrate(self):
-        """Pin the resting fire signal at target_rest, then set the threshold just above it.
-        Call again after anything that changes the FFN weights or biases."""
+        """
+        pin the resting fire signal at target_rest, then set the threshold just above it.
+        call again after anything that changes the FFN weights or biases.
+        """
         eps = 1e-6
         rest_now = float(np.clip(self._fire_signal(0.0, 0.0), eps, 1 - eps))
         target = float(np.clip(self.target_rest, eps, 1 - eps))
@@ -99,7 +117,7 @@ class Neuron:
         self.threshold = target + self.threshold_margin
 
     def sensitivity_report(self, high_potential: float = 3.0):
-        """Does this neuron respond upward to input, and can input cross its threshold?"""
+        """does this neuron respond upward to input, and can input cross its threshold?"""
         rest = self._fire_signal(0.0, 0.0)
         high = self._fire_signal(high_potential, 0.0)
         return {
@@ -109,8 +127,14 @@ class Neuron:
             "silent_at_rest": rest <= self.threshold,
             "can_fire": high > self.threshold,
         }
+    def self_sustains(self, trace_value: float = 1.0) -> bool:
+        """Can this neuron cross threshold from spike_trace alone, at zero potential?"""
+        return self._fire_signal(0.0, trace_value) > self.threshold
 
     def add_synapse(self, target: Neuron, weight: float, delay: int = 1):
+        
+        if target.is_output_neuron and len(target.incoming_synapses) >= 1:
+            return
         if target is self:
             return
         if any(s.receiver is target for s in self.outgoing_synapses):
@@ -134,7 +158,7 @@ class Neuron:
         drive = sum(self.incoming)
         self.potential = self.potential * self.potential_leak + drive
 
-        x = np.concatenate(([self.potential, self.spike_trace], self.chem_inputs))
+        x = np.concatenate(([self.potential], self.chem_inputs))
         a2 = self._forward(x)
         self.last_fire_signal = float(a2[0])
 
@@ -144,6 +168,7 @@ class Neuron:
 
         self.rate_estimate = self.rate_estimate * 0.99 + float(fired) * 0.01
         self.threshold += self.homeostasis_tau * (self.rate_estimate - self.target_rate)
+        self.threshold = max(self.threshold, self.min_threshold)   # NEW: never let it sink below this
 
         self.spike_trace = self.spike_trace * self.spike_leak + float(fired)
 
@@ -152,8 +177,14 @@ class Neuron:
 
     def process(self):
         """Pass 1: read last tick's spike flags and decide. Writes nothing to synapses."""
-        self.push_synapse_inputs_to_neuron()
-        self.fired, self.chem_release = self.input_pass()
+        
+        if self.is_input_neuron:
+            # whenever we're doing an input, we manually set input neuron's attribute fired = True or fired = False for that specific tick
+            pass
+        else:
+            self.push_synapse_inputs_to_neuron()
+            self.fired, self.chem_release = self.input_pass()
+            
 
     def forward(self):
       """Pass 2: hand this tick's spike to every outgoing synapse."""
