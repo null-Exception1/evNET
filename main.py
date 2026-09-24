@@ -99,6 +99,7 @@ def make_sane_creature(rng, N_INPUT, N_OUTPUT, N_HIDDEN, MARGIN, WORLD_W, SCREEN
                 weight,
                 delay=delay_from_distance(a, b),
             )
+            
         if len(a.outgoing_synapses) > before:
             made += 1
         attempts += 1
@@ -116,9 +117,9 @@ def brain_tick(kick=False):
     global tick, creature
 
     input_neurons = [x for x in creature.neurons if x.is_input_neuron]
-    for n in input_neurons:
-
-        n.fired = False
+    
+    #for n in input_neurons:
+    #    n.fired = False
 
     if kick and input_neurons:
         n = random.choice(input_neurons)
@@ -185,7 +186,7 @@ def reset_and_set_creature(params):
     
 finetunes = []
 creatures = []
-for i in range(50):
+for i in range(25,50):
     SEED = i
     random.seed(SEED)
     rng = np.random.default_rng(SEED)
@@ -209,7 +210,7 @@ event_log = []
 # ---------------- pygame ----------------
 pygame.init()
 screen = pygame.display.set_mode((SCREEN_W, SCREEN_H))
-pygame.display.set_caption("NEAT test")
+pygame.display.set_caption("window")
 clock = pygame.time.Clock()
 font = pygame.font.SysFont("consolas", 14)
 small = pygame.font.SysFont("consolas", 12)
@@ -221,7 +222,49 @@ for n in neurons:
     print(n.self_sustains(1.0))
 
 curr = 0
+fitness = [0]*len(finetunes)
 while running:
+    # evaluation and what we do with the network
+
+    input_neurons = [x for x in creature.neurons if x.is_input_neuron]
+    output_neurons = [x for x in creature.neurons if x.is_output_neuron]
+    
+    for n in input_neurons:
+        n.fired = False
+
+    # for task 1 let me just fire one input neuron and reward network for firing one output neuron
+    if tick%60 == 0:
+        input_neurons[1].fired = True
+        print('fire')
+
+    # right now im just rewarding whenever it fires an output neuron 
+    for n in output_neurons:
+        if n.fired:
+            fitness[curr] += 1
+            print("creature rewarded")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     if tick >= 300 and curr < 50:
         
@@ -257,10 +300,7 @@ while running:
             tick_timer -= step
             kick = KICK_EVERY > 0 and tick % KICK_EVERY == 0
             brain_tick(kick=kick)
-            #print("tick ",tick)
-            #for n in neurons:
-            #    print(f"pot={n.potential:.2f} trace={n.spike_trace:.2f} thr={n.threshold:.2f} raw={n.last_fire_signal:.2f} fired={n.fired}")
-        
+            
     # ---------------- draw ----------------
     screen.fill((8, 8, 14))
 
