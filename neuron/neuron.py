@@ -181,6 +181,10 @@ class Neuron:
         if self.is_input_neuron:
             # whenever we're doing an input, we manually set input neuron's attribute fired = True or fired = False for that specific tick
             pass
+        elif self.is_output_neuron:
+            self.push_synapse_inputs_to_neuron()
+            if len(self.incoming_synapses) == 1: # check if anything connected
+                self.fired = self.incoming_synapses[0].spike
         else:
             self.push_synapse_inputs_to_neuron()
             self.fired, self.chem_release = self.input_pass()

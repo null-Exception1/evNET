@@ -7,19 +7,19 @@ import pygame
 
 from neuron import Neuron
 from creature import Creature
-
+from finetune import Finetune
 # ---------------- config ----------------
 SEED = 1
 N_INPUT = 3
 N_OUTPUT = 3
 N_HIDDEN = 10
-N_SYNAPSES = 30
+N_SYNAPSES = 10
 SCREEN_W, SCREEN_H = 1000, 640
 PANEL_W = 260
 WORLD_W = SCREEN_W - PANEL_W
-MARGIN = 60                          # keep input/output columns off the screen edges
+MARGIN = 60                          
 TICKS_PER_SECOND = 60
-KICK_EVERY = 0                       # ticks between auto-kicks on a random input (0 = never)
+KICK_EVERY = 0                       
 FLASH_TICKS = 4
 HISTORY = 200
 VELOCITY = 70.0
@@ -35,8 +35,6 @@ HIDDEN_COLOR = (60, 110, 255)        # blue
 def delay_from_distance(a, b):
     return max(1, round(math.dist(a.pos, b.pos) / VELOCITY))
 
-
-# ---------------- build the brain ----------------
 def column_positions(n, x, y_top, y_bottom):
     """Evenly space n neurons down a fixed vertical column at x."""
     if n == 1:
@@ -52,66 +50,60 @@ def make_sane_neuron(pos, color, rng, is_input=False, is_output=False, max_resam
             return n
     raise RuntimeError(f"couldn't draw a sane neuron after {max_resample} tries")
 
-input_positions = column_positions(N_INPUT, MARGIN, MARGIN, SCREEN_H - MARGIN)
-output_positions = column_positions(N_OUTPUT, WORLD_W - MARGIN, MARGIN, SCREEN_H - MARGIN)
+def make_sane_creature(rng, N_INPUT, N_OUTPUT, N_HIDDEN, MARGIN, WORLD_W, SCREEN_H, INPUT_COLOR, OUTPUT_COLOR,HIDDEN_COLOR, N_SYNAPSES):
+    input_positions = column_positions(N_INPUT, MARGIN, MARGIN, SCREEN_H - MARGIN)
+    output_positions = column_positions(N_OUTPUT, WORLD_W - MARGIN, MARGIN, SCREEN_H - MARGIN)
 
-input_neurons = [
-    make_sane_neuron(pos=pos, color=INPUT_COLOR, rng=rng,
-           threshold_margin=0.05, input_gain=8.0, is_input=True)
-    for pos in input_positions
-]
-output_neurons = [
-    make_sane_neuron(pos=pos, color=OUTPUT_COLOR, rng=rng,
-           threshold_margin=0.05, input_gain=8.0, is_output=True)
-    for pos in output_positions
-]
-hidden_neurons = [
-    make_sane_neuron(
-        pos=(random.randint(MARGIN + 60, WORLD_W - MARGIN - 60), random.randint(30, SCREEN_H - 30)),
-        color=HIDDEN_COLOR, rng=rng,
-        threshold_margin=0.05, input_gain=8.0,
-    )
-    for _ in range(N_HIDDEN)
-]
+    input_neurons = [
+        make_sane_neuron(pos=pos, color=INPUT_COLOR, rng=rng,
+            threshold_margin=0.05, input_gain=8.0, is_input=True)
+        for pos in input_positions
+    ]
+    output_neurons = [
+        make_sane_neuron(pos=pos, color=OUTPUT_COLOR, rng=rng,
+            threshold_margin=0.05, input_gain=8.0, is_output=True)
+        for pos in output_positions
+    ]
+    hidden_neurons = [
+        make_sane_neuron(
+            pos=(random.randint(MARGIN + 60, WORLD_W - MARGIN - 60), random.randint(30, SCREEN_H - 30)),
+            color=HIDDEN_COLOR, rng=rng,
+            threshold_margin=0.05, input_gain=8.0,
+        )
+        for _ in range(N_HIDDEN)
+    ]
 
-neurons = input_neurons + hidden_neurons + output_neurons
-N_NEURONS = len(neurons)
+    neurons = input_neurons + hidden_neurons + output_neurons
+    N_NEURONS = len(neurons)
 
-# wire hidden<->hidden and input->hidden freely; output neurons are capped
-# at one incoming synapse by add_synapse itself, so this loop can call it blindly
-wireable_sources = input_neurons + hidden_neurons
-wireable_targets = hidden_neurons + output_neurons
+    # wire hidden<->hidden and input->hidden freely; output neurons are capped
+    # at one incoming synapse by add_synapse itself, so this loop can call it blindly
+    wireable_sources = input_neurons + hidden_neurons
+    wireable_targets = hidden_neurons + output_neurons
 
-for n in hidden_neurons:
-    n.is_inhibitory = rng.random() < 0.2   # ~20% inhibitory, a common cortical ratio ballpark
+    for n in hidden_neurons:
+        n.is_inhibitory = rng.random() < 0.2   # ~20% inhibitory, a common cortical ratio ballpark
 
-made = 0
-attempts = 0
-while made < N_SYNAPSES and attempts < N_SYNAPSES * 30:
-    a = random.choice(wireable_sources)
-    b = random.choice(wireable_targets)
-    before = len(a.outgoing_synapses)
-    raw_weight = float(rng.uniform(0.4, 1.2))   # magnitude only, always positive draw
-    weight = -raw_weight if a.is_inhibitory else raw_weight
-    a.add_synapse(
-        b,
-        weight,
-        delay=delay_from_distance(a, b),
-    )
-    if len(a.outgoing_synapses) > before:
-        made += 1
-    attempts += 1
+    made = 0
+    attempts = 0
+    while made < N_SYNAPSES and attempts < N_SYNAPSES * 30:
+        a = random.choice(wireable_sources)
+        b = random.choice(wireable_targets)
+        before = len(a.outgoing_synapses)
+        raw_weight = float(rng.uniform(0.4, 1.2))   # magnitude only, always positive draw
+        weight = -raw_weight if a.is_inhibitory else raw_weight
 
-
-creature = Creature(neurons)
-
-# ---------------- bookkeeping ----------------
-tick = 0
-paused = False
-fire_history = [[] for _ in neurons]
-flash = [0] * N_NEURONS
-event_log = []
-
+        if not (a.is_input_neuron and b.is_output_neuron) or (a.is_output_neuron and b.is_input_neuron):
+            a.add_synapse(
+                b,
+                weight,
+                delay=delay_from_distance(a, b),
+            )
+        if len(a.outgoing_synapses) > before:
+            made += 1
+        attempts += 1
+    creature = Creature(neurons)
+    return N_NEURONS, creature, neurons, input_neurons, output_neurons, made, attempts, Finetune(creature, 10)
 
 def log(msg):
     event_log.append((tick, msg))
@@ -121,20 +113,22 @@ def log(msg):
 
 def brain_tick(kick=False):
     """One full creature step, plus a manual kick on an input neuron."""
-    global tick
+    global tick, creature
 
+    input_neurons = [x for x in creature.neurons if x.is_input_neuron]
     for n in input_neurons:
+
         n.fired = False
 
     if kick and input_neurons:
         n = random.choice(input_neurons)
-        i = neurons.index(n)
+        i = creature.neurons.index(n)
         n.fired = True
         log(f"kick -> input {i}")
 
     creature.brain_tick()
 
-    for i, n in enumerate(neurons):
+    for i, n in enumerate(creature.neurons):
         fire_history[i].append(1 if n.fired else 0)
         if len(fire_history[i]) > HISTORY:
             fire_history[i].pop(0)
@@ -156,33 +150,66 @@ def health_report():
     stuck = [i for i in range(N_NEURONS) if len(fire_history[i]) >= 50 and firing_rate(i) > 0.9]
     return dead, stuck
 
+def diagnostics():
+    global N_NEURONS, creature, neurons, input_neurons, output_neurons, made, attempts
+    # ---------------- startup diagnostics (terminal) ----------------
+    print(f"{N_INPUT} input, {N_HIDDEN} hidden, {N_OUTPUT} output\n")
+    print("--- neuron sensitivity ---")
+    bad = 0
+    for i, n in enumerate(neurons):
+        sigs = [n._fire_signal(p, 0.0) for p in (0.5, 1.0, 2.0)]
+        ok = sigs[1] > n.threshold
+        bad += not ok
+        kind = "IN " if n.is_input_neuron else "OUT" if n.is_output_neuron else "hid"
+        print(f"n{i:2d} [{kind}] thr={n.threshold:.2f} out@0.5/1/2 = "
+            f"{sigs[0]:.2f}/{sigs[1]:.2f}/{sigs[2]:.2f} {'OK' if ok else 'BAD'}")
+    print(f"{bad} of {len(neurons)} neurons failed\n")
 
-# ---------------- startup diagnostics (terminal) ----------------
-print(f"{N_INPUT} input, {N_HIDDEN} hidden, {N_OUTPUT} output\n")
-print("--- neuron sensitivity ---")
-bad = 0
-for i, n in enumerate(neurons):
-    sigs = [n._fire_signal(p, 0.0) for p in (0.5, 1.0, 2.0)]
-    ok = sigs[1] > n.threshold
-    bad += not ok
-    kind = "IN " if n.is_input_neuron else "OUT" if n.is_output_neuron else "hid"
-    print(f"n{i:2d} [{kind}] thr={n.threshold:.2f} out@0.5/1/2 = "
-          f"{sigs[0]:.2f}/{sigs[1]:.2f}/{sigs[2]:.2f} {'OK' if ok else 'BAD'}")
-print(f"{bad} of {len(neurons)} neurons failed\n")
+    for n in output_neurons:
+        i = neurons.index(n)
+        print(f"output n{i}: incoming synapses = {len(n.incoming_synapses)} (should be 0 or 1)")
+    print(f"\nwired: {made}/{N_SYNAPSES} synapses after {attempts} attempts\n")
 
-for n in output_neurons:
-    i = neurons.index(n)
-    print(f"output n{i}: incoming synapses = {len(n.incoming_synapses)} (should be 0 or 1)")
-print(f"\nwired: {made}/{N_SYNAPSES} synapses after {attempts} attempts\n")
+    for i, n in enumerate(neurons):
+        outs = [neurons.index(s.receiver) for s in n.outgoing_synapses]
+        print(f"n{i} ({'INH' if getattr(n, 'is_inhibitory', False) else 'exc'}) -> {outs}")
 
-for i, n in enumerate(neurons):
-    outs = [neurons.index(s.receiver) for s in n.outgoing_synapses]
-    print(f"n{i} ({'INH' if getattr(n, 'is_inhibitory', False) else 'exc'}) -> {outs}")
+def reset_and_set_creature(params):
+    global N_NEURONS, creature, neurons, input_neurons, output_neurons, made, attempts, tick, paused, fire_history, flash, event_log, curr_tune, curr_creature
+    tick = 0
+    paused = False
+    fire_history = [[] for _ in neurons]
+    flash = [0] * N_NEURONS
+    event_log = []
+    creature, curr_tune, curr_creature = params
+    
+finetunes = []
+creatures = []
+for i in range(50):
+    SEED = i
+    random.seed(SEED)
+    rng = np.random.default_rng(SEED)
+    N_NEURONS, creature, neurons, input_neurons, output_neurons, made, attempts, finetune = make_sane_creature(rng, N_INPUT, N_OUTPUT, N_HIDDEN, MARGIN, WORLD_W, SCREEN_H, INPUT_COLOR, OUTPUT_COLOR,HIDDEN_COLOR, N_SYNAPSES)
+
+    for x in range(len(finetune.finetunes)):
+        finetunes.append([finetune.finetunes[x], x, i])
+
+    creatures.append([creature,i])
+
+print(finetunes[0])
+creature, curr_tune, curr_creature = finetunes[0]
+
+# ---------------- bookkeeping ----------------
+tick = 0
+paused = False
+fire_history = [[] for _ in neurons]
+flash = [0] * N_NEURONS
+event_log = []
 
 # ---------------- pygame ----------------
 pygame.init()
 screen = pygame.display.set_mode((SCREEN_W, SCREEN_H))
-pygame.display.set_caption("Brain test")
+pygame.display.set_caption("NEAT test")
 clock = pygame.time.Clock()
 font = pygame.font.SysFont("consolas", 14)
 small = pygame.font.SysFont("consolas", 12)
@@ -192,7 +219,18 @@ running = True
 
 for n in neurons:
     print(n.self_sustains(1.0))
+
+curr = 0
 while running:
+
+    if tick >= 300 and curr < 50:
+        
+        curr += 1
+        print("curr_creature",curr_creature,": curr_tune",curr_tune)
+
+        reset_and_set_creature(finetunes[curr])
+        
+        
     dt = clock.tick(60) / 1000.0
 
     for event in pygame.event.get():
@@ -219,9 +257,9 @@ while running:
             tick_timer -= step
             kick = KICK_EVERY > 0 and tick % KICK_EVERY == 0
             brain_tick(kick=kick)
-            print("tick ",tick)
-            for n in neurons:
-                print(f"pot={n.potential:.2f} trace={n.spike_trace:.2f} thr={n.threshold:.2f} raw={n.last_fire_signal:.2f} fired={n.fired}")
+            #print("tick ",tick)
+            #for n in neurons:
+            #    print(f"pot={n.potential:.2f} trace={n.spike_trace:.2f} thr={n.threshold:.2f} raw={n.last_fire_signal:.2f} fired={n.fired}")
         
     # ---------------- draw ----------------
     screen.fill((8, 8, 14))
@@ -248,7 +286,7 @@ while running:
         if s.spike:
             pygame.draw.line(screen, bright, (x1, y1), (x2, y2), 2)
 
-    for i, n in enumerate(neurons):
+    for i, n in enumerate(creature.neurons):
         firing = flash[i] > 0
         is_io = n.is_input_neuron or n.is_output_neuron
         radius = (10 if is_io else 8) + (3 if firing else 0)
@@ -310,14 +348,3 @@ while running:
 
     pygame.display.update()
 
-
-pygame.quit()
-
-print(f"\nran {tick} ticks")
-dead, stuck = health_report()
-print("dead neurons :", dead or "none")
-print("stuck neurons:", stuck or "none")
-for i, n in enumerate(neurons):
-    kind = "IN " if n.is_input_neuron else "OUT" if n.is_output_neuron else "hid"
-    print(f"  n{i:2d} [{kind}] rate={firing_rate(i)*100:5.1f}%  last raw fire signal={n.last_fire_signal:.2f}")
-sys.exit()
