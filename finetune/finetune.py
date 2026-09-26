@@ -12,7 +12,7 @@ class Finetune:
         self.batch_size: int = batch_size
 
         self.randomize_synapse_weights = 0.2
-        self.randomize_neuron_wiring = 0.2
+        self.randomize_neuron_wiring = 0.7
         self.create_finetunes()
     @staticmethod
     def delay_from_distance(a, b):
@@ -29,26 +29,26 @@ class Finetune:
             final_creature = self.original_creature.clone()
             for synapse in final_creature.all_synapses:
                 if random.random() < self.randomize_synapse_weights: # 20% chance of changing up the weights
-                    synapse.weight = float(random.uniform(0.4, 1.2))
+                    raw_weight = float(random.uniform(0.4, 1.2))
+                    synapse.weight = -raw_weight if synapse.sender.is_inhibitory else raw_weight
 
             
-            for i in range(int(len(final_creature.neurons)*self.randomize_neuron_wiring)): # right now only 20%
-                a = random.choice(final_creature.neurons)
-                b = random.choice(final_creature.neurons)
-
-                if random.random() < 0.5: # coin flip whether it should add or subtract
-                    before = len(a.outgoing_synapses)
-                    raw_weight = float(random.uniform(0.4, 1.2))   # magnitude only, always positive draw
-                    weight = -raw_weight if a.is_inhibitory else raw_weight
-
-                    if not (a.is_input_neuron and b.is_output_neuron) or (a.is_output_neuron and b.is_input_neuron):
-                        a.add_synapse(
-                            b,
-                            weight,
-                            delay=self.delay_from_distance(a, b),
-                        )
-                else:
-                    a.delete_synapse(b)
-
+            
+            for a in final_creature.neurons: # right now only 70%
+                if random.random() < self.randomize_neuron_wiring:
+                    if len(a.outgoing_synapses) >= 1 and random.random() < 0.5:
+                        a.delete_synapse(random.choice(a.outgoing_synapses).receiver) 
+                    else:
+                        b = random.choice(final_creature.neurons)
+                        raw_weight = float(random.uniform(0.4, 1.2))   # magnitude only, always positive draw
+                        weight = -raw_weight if a.is_inhibitory else raw_weight
+                        
+                        if not ((a.is_input_neuron and b.is_output_neuron) or (a.is_output_neuron and b.is_input_neuron) or (a.is_input_neuron and b.is_input_neuron)  or (a.is_output_neuron and b.is_output_neuron)):
+                            a.add_synapse(
+                                b,
+                                weight,
+                                delay=self.delay_from_distance(a, b),
+                            )
+                    
             # add 
             self.finetunes.append(final_creature)
