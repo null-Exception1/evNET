@@ -27,8 +27,8 @@ VELOCITY = 70.0
 
 # --- NEAT / evaluation config ---
 GENERATIONS = 100
-BATCH_SIZE = 20
-TRIAL_TICKS = 500          # ticks per evaluation trial; keep tight so wasteful routing costs fitness
+BATCH_SIZE = 100
+TRIAL_TICKS = 300          # ticks per evaluation trial; keep tight so wasteful routing costs fitness
 CORRECT_OUTPUT_INDEX = 0  # which output index counts as "correct" for a single-pair test (unused by evaluate_multi)
 FIRE_INPUT_INDEX = 1      # which input neuron to fire for a single-pair test (unused by evaluate_multi)
 
@@ -259,7 +259,7 @@ clock = pygame.time.Clock()
 font = pygame.font.SysFont("consolas", 14)
 small = pygame.font.SysFont("consolas", 12)
 
-PREVIEW_TICKS = 90  # how many ticks of each generation's best creature to animate before moving on
+PREVIEW_TICKS = 1000  # how many ticks of each generation's best creature to animate before moving on
 
 
 class QuitRequested(Exception):
@@ -306,6 +306,9 @@ def brain_tick(kick=False):
     """One full creature step, plus a manual kick on an input neuron."""
     global tick
 
+    for n in input_neurons:
+        n.fired = False
+        
     if kick and input_neurons:
         n = random.choice(input_neurons)
         i = neurons.index(n)
@@ -518,8 +521,8 @@ while running:
             tick_timer -= step
             kick = KICK_EVERY > 0 and tick % KICK_EVERY == 0
             brain_tick(kick=kick)
-            if tick % 300 == 0:
-                reset_creature(creature)  # loop the demo trial so you can watch it repeatedly
+            #if tick % 300 == 0:
+            #    reset_creature(creature)  # loop the demo trial so you can watch it repeatedly
 
     draw()
 

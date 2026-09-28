@@ -15,8 +15,8 @@ class Neuron:
         input_gain: float = 1.0,
         potential_leak: float = 0.2,
         spike_leak: float = 0.2,
-        number_of_input_chemicals: int = 4,
-        number_of_output_chemicals: int = 4,
+        number_of_input_chemicals: int = 1,
+        number_of_output_chemicals: int = 1,
         hidden_size: int = 4,
         target_rate: float = 0.1,
         homeostasis_tau: float = 0.05,
@@ -153,6 +153,7 @@ class Neuron:
 
     def push_synapse_inputs_to_neuron(self):
         self.incoming = [s.weight if s.spike else 0.0 for s in self.incoming_synapses]
+
 
     def input_pass(self):
         drive = sum(self.incoming)
