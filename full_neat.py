@@ -26,12 +26,13 @@ HISTORY = 200
 VELOCITY = 70.0
 
 # --- NEAT / evaluation config ---
-GENERATIONS = 100
-BATCH_SIZE = 100
+GENERATIONS = 10
+BATCH_SIZE = 10
 TRIAL_TICKS = 300          # ticks per evaluation trial; keep tight so wasteful routing costs fitness
 CORRECT_OUTPUT_INDEX = 0  # which output index counts as "correct" for a single-pair test (unused by evaluate_multi)
 FIRE_INPUT_INDEX = 1      # which input neuron to fire for a single-pair test (unused by evaluate_multi)
-
+NEURON_PALETTE = 8
+N_CREATURES = 10
 # input i must trigger output i, and only output i, for each pair below.
 # (fire_input_index, correct_output_index)
 MODULARITY_PAIRS = ((0, 0), (1, 1), (2, 2))
@@ -64,9 +65,15 @@ def make_sane_neuron(pos, color, rng, is_input=False, is_output=False, max_resam
             return n
     raise RuntimeError(f"couldn't draw a sane neuron after {max_resample} tries")
 
-
+neuron_palette = [make_sane_neuron(pos=(0,0),
+                                   color=(random.randint(0,255),random.randint(0,255),random.randint(0,255)),
+                                   rng=rng,
+                                   threshold_margin=0.05,
+                                   input_gain=8.0) for _ in range(NEURON_PALETTE)]
+import copy
 def make_sane_creature(rng, n_input, n_output, n_hidden, margin, world_w, screen_h,
                         input_color, output_color, hidden_color, n_synapses):
+    global neuron_palette
     input_positions = column_positions(n_input, margin, margin, screen_h - margin)
     output_positions = column_positions(n_output, world_w - margin, margin, screen_h - margin)
 
@@ -80,14 +87,15 @@ def make_sane_creature(rng, n_input, n_output, n_hidden, margin, world_w, screen
                           threshold_margin=0.05, input_gain=8.0, is_output=True)
         for pos in output_positions
     ]
+
     hidden_neurons = [
-        make_sane_neuron(
-            pos=(random.randint(margin + 60, world_w - margin - 60), random.randint(30, screen_h - 30)),
-            color=hidden_color, rng=rng,
-            threshold_margin=0.05, input_gain=8.0,
-        )
-        for _ in range(n_hidden)
-    ]
+            
+        ]
+    
+    for _ in range(n_hidden):
+        hidden_neuron = copy.deepcopy(random.choice(neuron_palette)) 
+        hidden_neuron.pos = (random.randint(0,WORLD_W), random.randint(MARGIN,SCREEN_H-MARGIN))
+        hidden_neurons.append(hidden_neuron)
 
     neurons = input_neurons + hidden_neurons + output_neurons
 
@@ -253,28 +261,6 @@ def diagnostics(creature, neurons, output_neurons, made, attempts, n_synapses):
 
 heatmap_surf = pygame.Surface((WORLD_W, SCREEN_H), pygame.SRCALPHA)
 
-show_chem_heatmap = True
-def draw_heatmap():
-    """Coarse grid heatmap of one chemical channel's concentration, sampled by nearest neuron."""
-    heatmap_surf.fill((0, 0, 0, 0))
-    if not creature.neurons or not show_chem_heatmap:
-        screen.blit(heatmap_surf, (0, 0))
-        return
-    ch = 0
-    cell = 20
-    for gx in range(0, WORLD_W, cell):
-        for gy in range(0, SCREEN_H, cell):
-            cx, cy = gx + cell / 2, gy + cell / 2
-            total = 0.0
-            for n in creature.neurons:
-                if not np.any(n.chem_release):
-                    continue
-                dist = math.hypot(n.pos[0] - cx, n.pos[1] - cy)
-                total += n.chem_release[ch] * math.exp(-dist / controls["chem_range"])
-            if total > 0.01:
-                alpha = int(min(total, 1.0) * 160)
-                pygame.draw.rect(heatmap_surf, (255, 140, 0, alpha), (gx, gy, cell, cell))
-    screen.blit(heatmap_surf, (0, 0))
 
 
 # =============== pygame setup (comes up FIRST so evolution can be watched live) ===============
@@ -393,7 +379,7 @@ def text(msg, color=(220, 220, 230), f=font):
 def draw():
     global y
     screen.fill((8, 8, 14))
-    draw_heatmap()
+
     pygame.draw.line(screen, (30, 45, 35), (MARGIN, 0), (MARGIN, SCREEN_H), 1)
     pygame.draw.line(screen, (45, 35, 30), (WORLD_W - MARGIN, 0), (WORLD_W - MARGIN, SCREEN_H), 1)
 
@@ -507,21 +493,32 @@ def on_generation(gen, best_score, best, scored):
 
 
 # =============== build the seed creature and run NEAT, watching it evolve live ===============
-creature, neurons, input_neurons, output_neurons, made, attempts = make_sane_creature(
-    rng, N_INPUT, N_OUTPUT, N_HIDDEN, MARGIN, WORLD_W, SCREEN_H,
-    INPUT_COLOR, OUTPUT_COLOR, HIDDEN_COLOR, N_SYNAPSES
-)
 
-diagnostics(creature, neurons, output_neurons, made, attempts, N_SYNAPSES)
+creatures = []
 
-print("\n--- running NEAT (synaptic tuning only) ---")
-try:
-    best_creature, fitness_history = run_neat(creature, generations=GENERATIONS, batch_size=BATCH_SIZE,
-                                               trial_ticks=TRIAL_TICKS, on_generation=on_generation)
-except QuitRequested:
-    pygame.quit()
-    sys.exit()
+for i in range(N_CREATURES):
+    creature, neurons, input_neurons, output_neurons, made, attempts = make_sane_creature(
+        rng, N_INPUT, N_OUTPUT, N_HIDDEN, MARGIN, WORLD_W, SCREEN_H,
+        INPUT_COLOR, OUTPUT_COLOR, HIDDEN_COLOR, N_SYNAPSES
+    )
 
+    creatures.append([creature, neurons, input_neurons, output_neurons, made, attempts])
+
+fitness = [[0]*GENERATIONS for _ in range(N_CREATURES)]
+
+for curr_creature_index in range(len(creatures)):
+    creature, neurons, input_neurons, output_neurons, made, attempts = creatures[curr_creature_index]
+    diagnostics(creature, neurons, output_neurons, made, attempts, N_SYNAPSES)
+
+    print("\n--- running NEAT (synaptic tuning only) ---")
+    try:
+        best_creature, fitness_history = run_neat(creature, generations=GENERATIONS, batch_size=BATCH_SIZE,
+                                                trial_ticks=TRIAL_TICKS, on_generation=on_generation)
+    except QuitRequested:
+        pygame.quit()
+        sys.exit()
+
+"""
 print(f"\nfinal best fitness: {fitness_history[-1]:+.2f}")
 print(f"fitness history: {fitness_history}")
 
@@ -554,3 +551,5 @@ while running:
 
 pygame.quit()
 sys.exit()
+
+"""

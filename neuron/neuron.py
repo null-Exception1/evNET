@@ -140,7 +140,8 @@ class Neuron:
         if any(s.receiver is target for s in self.outgoing_synapses):
             return
         s = Synapse(weight, self, target, delay)
-        self.outgoing_synapses.append(s)
+        if not self.is_output_neuron:
+            self.outgoing_synapses.append(s)
         target.incoming_synapses.append(s)
 
     def delete_synapse(self, target: Neuron):

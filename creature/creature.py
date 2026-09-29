@@ -1,6 +1,7 @@
 from neuron import Neuron, Synapse
 import copy
 import math
+import numpy as np
 class Creature:
     def __init__(self, 
                  neurons: list[Neuron] = []
@@ -10,16 +11,14 @@ class Creature:
         self.input_neurons = [n for n in neurons if n.is_input_neuron]
         self.output_neurons = [n for n in neurons if n.is_output_neuron]
         self.ticks = 0
-        self.chem_decay = 0.5 # manual for now
+        self.chem_decay = 0.95 # manual for now
+        self.chem_range = 120
     @property
     def all_synapses(self) -> list[Synapse]:
-        """Dynamically pulls the up-to-date active synapses across the graph structure."""
         return [s for n in self.neurons for s in n.outgoing_synapses]
     
     def clone(self) -> 'Creature':
-        """Creates a perfect structural duplicate of the creature, preserving cyclic graph wiring."""
         memo = {}
-        # copy.deepcopy automatically manages cross-references inside the graph using the memo dict
         cloned_neurons = copy.deepcopy(self.neurons, memo)
         
         cloned_creature = Creature(cloned_neurons)
@@ -31,14 +30,14 @@ class Creature:
         # some chemistry shit going on here
 
         neuron.chem_inputs *= self.chem_decay
-        #print("neuron chem_inputs",neuron.chem_inputs)
+        
         for n2 in self.neurons:
             if id(neuron) != id(n2):
                 distance = math.hypot(neuron.pos[0]-n2.pos[0],neuron.pos[1]-n2.pos[1])
                 #print("chem inputs: ",n2.chem_release,", self ticks",self.ticks)
-                neuron.chem_inputs += n2.chem_release*(1/(distance))*100
-            #print()
+                neuron.chem_inputs += n2.chem_release * np.exp(-distance / self.chem_range)
         
+        neuron.chem_inputs = np.clip(neuron.chem_inputs,0,5)
 
     def brain_tick(self):
         for n in self.neurons:
