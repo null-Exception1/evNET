@@ -159,12 +159,15 @@ class Neuron:
     def input_pass(self):
         drive = sum(self.incoming)
         self.potential = self.potential * self.potential_leak + drive
-
+        #if sum(self.chem_inputs) > 0.2:
+        #    print(self.chem_inputs)
         x = np.concatenate(([self.potential], self.chem_inputs))
         a2 = self._forward(x)
         self.last_fire_signal = float(a2[0])
 
         fired = bool(a2[0] > self.threshold)
+        if fired and self.potential == 0.0:
+            print("fired without potential ",self.chem_inputs, a2)
         if fired:
             self.potential = 0.0
 

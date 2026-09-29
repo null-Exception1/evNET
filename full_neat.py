@@ -10,16 +10,16 @@ from creature import Creature
 from finetune import Finetune
 
 # ---------------- config ----------------
-SEED = 300423940
+SEED = 10
 N_INPUT = 3
 N_OUTPUT = 3
 N_HIDDEN = 10
-N_SYNAPSES = 5
+N_SYNAPSES = 10
 SCREEN_W, SCREEN_H = 1000, 640
 PANEL_W = 260
 WORLD_W = SCREEN_W - PANEL_W
 MARGIN = 60
-TICKS_PER_SECOND = 60
+TICKS_PER_SECOND = 20
 KICK_EVERY = 0
 FLASH_TICKS = 4
 HISTORY = 200
@@ -31,7 +31,7 @@ BATCH_SIZE = 10
 TRIAL_TICKS = 300          # ticks per evaluation trial; keep tight so wasteful routing costs fitness
 CORRECT_OUTPUT_INDEX = 0  # which output index counts as "correct" for a single-pair test (unused by evaluate_multi)
 FIRE_INPUT_INDEX = 1      # which input neuron to fire for a single-pair test (unused by evaluate_multi)
-NEURON_PALETTE = 8
+NEURON_PALETTE = 15
 N_CREATURES = 10
 # input i must trigger output i, and only output i, for each pair below.
 # (fire_input_index, correct_output_index)
@@ -261,6 +261,42 @@ def diagnostics(creature, neurons, output_neurons, made, attempts, n_synapses):
 
 heatmap_surf = pygame.Surface((WORLD_W, SCREEN_H), pygame.SRCALPHA)
 
+# ---------------- chemical heatmap ----------------
+show_chem_heatmap = True
+heatmap_channel = 0        # which chemical channel to display
+HEAT_CELL = 20             # px per grid cell
+HEAT_FULL_SCALE = 2.5      # concentration that maps to full brightness (chem_inputs clip at 5)
+HEAT_MIN = 0.03            # don't paint cells fainter than this
+_heat_cx = np.arange(0, WORLD_W, HEAT_CELL) + HEAT_CELL / 2
+_heat_cy = np.arange(0, SCREEN_H, HEAT_CELL) + HEAT_CELL / 2
+_heat_gx, _heat_gy = np.meshgrid(_heat_cx, _heat_cy, indexing="ij")   # shape (nx, ny)
+
+
+HEAT_RANGE = 120        # display falloff only; sim still uses creature.chem_range
+HEAT_TRAIL = 0.985      # per-frame fade (~0.75 s half-life at 60 fps)
+HEAT_FULL_SCALE = 0.5
+HEAT_MIN = 0.01
+heat_accum = np.zeros_like(_heat_gx)
+
+def chem_field(ch):
+    ns = creature.neurons
+    px = np.array([n.pos[0] for n in ns], dtype=float)
+    py = np.array([n.pos[1] for n in ns], dtype=float)
+    release = np.array([n.chem_release[ch % len(n.chem_release)] for n in ns])
+    d = np.hypot(_heat_gx[..., None] - px, _heat_gy[..., None] - py)
+    return (np.exp(-(d**1.2) / HEAT_RANGE) * release).sum(-1)
+
+def draw_heatmap():
+    global heat_accum
+    heatmap_surf.fill((0, 0, 0, 0))
+    if creature.neurons and show_chem_heatmap:
+        if not paused:
+            heat_accum = np.maximum(heat_accum * HEAT_TRAIL, chem_field(heatmap_channel))
+        for ix, iy in np.argwhere(heat_accum > HEAT_MIN):
+            alpha = int(min(heat_accum[ix, iy] / HEAT_FULL_SCALE, 1.0) * 170)
+            pygame.draw.rect(heatmap_surf, (255, 140, 0, alpha),
+                             (int(ix * HEAT_CELL), int(iy * HEAT_CELL), HEAT_CELL, HEAT_CELL))
+    screen.blit(heatmap_surf, (0, 0))
 
 
 # =============== pygame setup (comes up FIRST so evolution can be watched live) ===============
@@ -343,7 +379,7 @@ def brain_tick(kick=False):
 
 def handle_events():
     """Pump the pygame event queue and apply whatever key/quit the user made."""
-    global running, paused, TICKS_PER_SECOND, skip_gen_preview, fast_forward
+    global running, paused, TICKS_PER_SECOND, skip_gen_preview, fast_forward, show_chem_heatmap
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
@@ -352,6 +388,8 @@ def handle_events():
                 running = False
             elif event.key == pygame.K_SPACE:
                 paused = not paused
+            elif event.key == pygame.K_h:
+                show_chem_heatmap = not show_chem_heatmap
             elif event.key == pygame.K_k:
                 brain_tick(kick=True)
             elif event.key == pygame.K_RIGHT and paused:
@@ -379,6 +417,7 @@ def text(msg, color=(220, 220, 230), f=font):
 def draw():
     global y
     screen.fill((8, 8, 14))
+    draw_heatmap()
 
     pygame.draw.line(screen, (30, 45, 35), (MARGIN, 0), (MARGIN, SCREEN_H), 1)
     pygame.draw.line(screen, (45, 35, 30), (WORLD_W - MARGIN, 0), (WORLD_W - MARGIN, SCREEN_H), 1)
@@ -436,6 +475,9 @@ def draw():
     text("ENTER skip gen  TAB skip to end", (140, 220, 220), small)
     text("SPACE pause  K kick input", (140, 140, 160), small)
     text("RIGHT step  UP/DOWN speed", (140, 140, 160), small)
+    text("H toggle chem heatmap", (140, 140, 160), small)
+    text(f"chem_in max {max(float(n.chem_inputs.max()) for n in neurons):.2f}   "
+         f"releasing {sum(1 for n in neurons if n.chem_release.any())}", (255, 170, 90), small)
     y += 6
 
     dead, stuck = health_report()

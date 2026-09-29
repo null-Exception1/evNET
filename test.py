@@ -237,7 +237,7 @@ def draw_heatmap():
                 if not np.any(n.chem_release):
                     continue
                 dist = math.hypot(n.pos[0] - cx, n.pos[1] - cy)
-                total += n.chem_release[ch] * math.exp(-dist / controls["chem_range"])
+                total += n.chem_release[ch] * math.exp(-(dist**1.2) / controls["chem_range"]) 
             if total > 0.01:
                 alpha = int(min(total, 1.0) * 160)
                 pygame.draw.rect(heatmap_surf, (255, 140, 0, alpha), (gx, gy, cell, cell))
