@@ -12,9 +12,9 @@ class Creature:
         self.input_neurons = [n for n in neurons if n.is_input_neuron]
         self.output_neurons = [n for n in neurons if n.is_output_neuron]
         self.ticks = 0
-        self.chem_decay = 0.95 # manual for now
+        self.chem_decay = 0.7 # manual for now
         self.chem_range = 120
-        self.chem_amp= 30
+        self.chem_amp= 1
     @property
     def all_synapses(self) -> list[Synapse]:
         return [s for n in self.neurons for s in n.outgoing_synapses]

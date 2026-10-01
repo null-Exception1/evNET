@@ -26,13 +26,15 @@ HISTORY = 200
 VELOCITY = 70.0
 
 # --- NEAT / evaluation config ---
-GENERATIONS = 10
-BATCH_SIZE = 10
+GENERATIONS = 6
+BATCH_SIZE = 100
+N_CREATURES = 10
+N_OUTERNEAT_GENERATIONS = 5
 TRIAL_TICKS = 300          # ticks per evaluation trial; keep tight so wasteful routing costs fitness
 CORRECT_OUTPUT_INDEX = 0  # which output index counts as "correct" for a single-pair test (unused by evaluate_multi)
 FIRE_INPUT_INDEX = 1      # which input neuron to fire for a single-pair test (unused by evaluate_multi)
 NEURON_PALETTE = 15
-N_CREATURES = 10
+
 # input i must trigger output i, and only output i, for each pair below.
 # (fire_input_index, correct_output_index)
 MODULARITY_PAIRS = ((0, 0), (1, 1), (2, 2))
@@ -68,8 +70,18 @@ def make_sane_neuron(pos, color, rng, is_input=False, is_output=False, max_resam
 neuron_palette = [make_sane_neuron(pos=(0,0),
                                    color=(random.randint(0,255),random.randint(0,255),random.randint(0,255)),
                                    rng=rng,
+                                   threshold_margin=0.15,
+                                   homeostasis_tau=float(rng.uniform(0.5, 0.9)),
+                                   potential_leak=float(rng.uniform(0.1,0.3)),
+                                   spike_leak=float(rng.uniform(0.1,0.3)),
+                                   input_gain=float(rng.uniform(0.5,3)) ) for _ in range(NEURON_PALETTE)]
+"""
+neuron_palette = [make_sane_neuron(pos=(0,0),
+                                   color=(random.randint(0,255),random.randint(0,255),random.randint(0,255)),
+                                   rng=rng,
                                    threshold_margin=0.05,
                                    input_gain=8.0) for _ in range(NEURON_PALETTE)]
+"""
 import copy
 def make_sane_creature(rng, n_input, n_output, n_hidden, margin, world_w, screen_h,
                         input_color, output_color, hidden_color, n_synapses):
@@ -209,7 +221,6 @@ def run_generation(seed_creature, batch_size=BATCH_SIZE, trial_ticks=TRIAL_TICKS
     scored.sort(key=lambda x: (x[0], -len(x[1].all_synapses)), reverse=True) # sort by scores first, then the lessity of synapses (so it removes redundancy in the long run)
     return scored
 
-
 def run_neat(seed_creature, generations=GENERATIONS, batch_size=BATCH_SIZE, trial_ticks=TRIAL_TICKS,
              pairs=MODULARITY_PAIRS, on_generation=None):
     """Runs the full generation loop. `on_generation(gen, best_score, best_creature)` is an
@@ -307,7 +318,7 @@ clock = pygame.time.Clock()
 font = pygame.font.SysFont("consolas", 14)
 small = pygame.font.SysFont("consolas", 12)
 
-PREVIEW_TICKS = 1000  # how many ticks of each generation's best creature to animate before moving on
+PREVIEW_TICKS = 300  # how many ticks of each generation's best creature to animate before moving on
 
 
 class QuitRequested(Exception):
@@ -536,41 +547,63 @@ def on_generation(gen, best_score, best, scored):
 
 # =============== build the seed creature and run NEAT, watching it evolve live ===============
 
+
+skeletons = []
 creatures = []
+for gen in range(N_OUTERNEAT_GENERATIONS):
 
-for i in range(N_CREATURES):
-    creature, neurons, input_neurons, output_neurons, made, attempts = make_sane_creature(
-        rng, N_INPUT, N_OUTPUT, N_HIDDEN, MARGIN, WORLD_W, SCREEN_H,
-        INPUT_COLOR, OUTPUT_COLOR, HIDDEN_COLOR, N_SYNAPSES
-    )
+    
+    print("regenerating a new batch")
+    
+    for i in range(N_CREATURES):
+        creature, neurons, input_neurons, output_neurons, made, attempts = make_sane_creature(
+            rng, N_INPUT, N_OUTPUT, N_HIDDEN, MARGIN, WORLD_W, SCREEN_H,
+            INPUT_COLOR, OUTPUT_COLOR, HIDDEN_COLOR, N_SYNAPSES
+        )
 
-    creatures.append([creature, neurons, input_neurons, output_neurons, made, attempts])
+        creatures.append([creature, neurons, input_neurons, output_neurons, made, attempts])
 
-fitness = [[0]*GENERATIONS for _ in range(N_CREATURES)]
 
-for curr_creature_index in range(len(creatures)):
-    creature, neurons, input_neurons, output_neurons, made, attempts = creatures[curr_creature_index]
-    diagnostics(creature, neurons, output_neurons, made, attempts, N_SYNAPSES)
+    for curr_creature_index in range(len(creatures)):
+        creature, neurons, input_neurons, output_neurons, made, attempts = creatures[curr_creature_index]
+        diagnostics(creature, neurons, output_neurons, made, attempts, N_SYNAPSES)
 
-    print("\n--- running NEAT (synaptic tuning only) ---")
-    try:
-        best_creature, fitness_history = run_neat(creature, generations=GENERATIONS, batch_size=BATCH_SIZE,
-                                                trial_ticks=TRIAL_TICKS, on_generation=on_generation)
-    except QuitRequested:
-        pygame.quit()
-        sys.exit()
+        print("\n--- running NEAT (synaptic tuning only) ---")
+        try:
+            best_creature, fitness_history = run_neat(creature, generations=GENERATIONS, batch_size=BATCH_SIZE,
+                                                    trial_ticks=TRIAL_TICKS, on_generation=on_generation)
+            skeletons.append([creature, best_creature, fitness_history[-1]])
+        except QuitRequested:
+            pygame.quit()
+            sys.exit()
 
-"""
-print(f"\nfinal best fitness: {fitness_history[-1]:+.2f}")
-print(f"fitness history: {fitness_history}")
+    best_skeleton = max(skeletons,key= lambda x: (x[-1],-len(best_creature.all_synapses)))
 
-# build one more scored batch off the evolved best, so we have a whole
-# population of creatures to click through and visually debug
-final_batch = run_generation(best_creature, batch_size=BATCH_SIZE, trial_ticks=TRIAL_TICKS)
-population = [best_creature] + [c for _, c in final_batch]
-pop_scores = [fitness_history[-1]] + [s for s, _ in final_batch]
-gen_status = "evolution done -- browsing final batch"
-load_creature(0)
+    print("best skeleton score: ",best_skeleton[-1])
+
+    skeletons = [best_skeleton]
+
+    neurons = creature.neurons
+    input_neurons = [n for n in neurons if n.is_input_neuron]
+    output_neurons = [n for n in neurons if n.is_output_neuron]
+
+    creatures = [[best_skeleton[1],neurons,input_neurons,output_neurons,0,0]]
+
+best_skeleton = max(skeletons,key= lambda x: (x[-1],-len(best_creature.all_synapses)))
+
+creature = best_skeleton[1]
+
+neurons = creature.neurons
+input_neurons = [n for n in neurons if n.is_input_neuron]
+output_neurons = [n for n in neurons if n.is_output_neuron]
+reset_creature(creature)
+
+tick = 0
+fire_history = [[] for _ in neurons]
+flash = [0] * len(neurons)
+event_log = []
+log(f"loaded creature {current_idx}/{len(population) - 1}  score {pop_scores[current_idx]:+.2f}")
+
 
 # ---------------- interactive playback of the final batch ----------------
 tick_timer = 0.0
@@ -593,5 +626,3 @@ while running:
 
 pygame.quit()
 sys.exit()
-
-"""

@@ -1,17 +1,4 @@
 # test.py
-#
-# Manual playground: click to place neurons, drag to wire synapses, watch
-# spikes and chemical concentration live. Nothing here touches Finetune,
-# run_neat, or evaluate() -- it only builds a Creature and steps it by hand,
-# so you can freely break things without corrupting anything main.py depends on.
-#
-# NOTE: `chem_tick` / `chem_decay` / `chem_range` are written here as a plain
-# function operating on a Creature, matching what you showed in chat
-# (neuron.chem_inputs summed from neighbors' chem_release with exp falloff,
-# then clipped once per tick). If your real Creature class already owns this
-# method, delete `chem_tick()` below and call `creature.chem_tick()` instead --
-# the uploaded creature.py predates that addition so I can't tell which
-# constants/order you settled on. Everything else here is independent of that.
 
 import sys
 import math
@@ -81,7 +68,10 @@ def make_neuron(pos, kind, rng):
     color = INPUT_COLOR if is_input else OUTPUT_COLOR if is_output else HIDDEN_COLOR
     for _ in range(20):
         n = Neuron(pos, color, rng=rng, is_input_neuron=is_input, is_output_neuron=is_output,
-                   threshold_margin=0.05, input_gain=8.0)
+                    homeostasis_tau=0.9,
+                    spike_leak=0.2,
+                    potential_leak=0.2,
+                   threshold_margin=0.15, input_gain=0.5)
         r = n.sensitivity_report()
         if r["can_fire"] and not n.self_sustains():
             n.is_inhibitory = False
