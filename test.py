@@ -131,8 +131,8 @@ def reset_all():
 
 # ---------------- state ----------------
 rng = np.random.default_rng(0)
-creature = Creature([])
-
+#creature = Creature([])
+creature = Creature.load("saves/gen_0/best_of_creature_0.json")
 tick = 0
 paused = True
 selected = None            # neuron currently being dragged from, for wiring
@@ -437,7 +437,7 @@ def handle_key(key):
 
 running = True
 tick_timer = 0.0
-TICKS_PER_SECOND = 10
+TICKS_PER_SECOND = 3
 
 while running:
     dt = clock.tick(FPS) / 1000.0

@@ -31,12 +31,10 @@ BATCH_SIZE = 30
 N_CREATURES = 10
 N_OUTERNEAT_GENERATIONS = 5
 TRIAL_TICKS = 300          # ticks per evaluation trial; keep tight so wasteful routing costs fitness
-CORRECT_OUTPUT_INDEX = 0  # which output index counts as "correct" for a single-pair test (unused by evaluate_multi)
-FIRE_INPUT_INDEX = 1      # which input neuron to fire for a single-pair test (unused by evaluate_multi)
 NEURON_PALETTE = 15
 
 # input i must trigger output i, and only output i, for each pair below.
-# (fire_input_index, correct_output_index)
+# (fire_input_index, correct_output_index) 
 MODULARITY_PAIRS = ((0, 0), (1, 1), (2, 2))
 
 random.seed(SEED)
@@ -44,7 +42,6 @@ rng = np.random.default_rng(SEED)
 
 INPUT_COLOR = (90, 230, 140)   # green
 OUTPUT_COLOR = (255, 140, 90)  # orange
-HIDDEN_COLOR = (60, 110, 255)  # blue
 
 
 def delay_from_distance(a, b):
@@ -76,16 +73,9 @@ neuron_palette = [make_sane_neuron(pos=(0,0),
                                    potential_leak=float(rng.uniform(0.1,0.3)),
                                    spike_leak=float(rng.uniform(0.1,0.3)),
                                    input_gain=float(rng.uniform(0.5,3)) ) for _ in range(NEURON_PALETTE)]
-"""
-neuron_palette = [make_sane_neuron(pos=(0,0),
-                                   color=(random.randint(0,255),random.randint(0,255),random.randint(0,255)),
-                                   rng=rng,
-                                   threshold_margin=0.05,
-                                   input_gain=8.0) for _ in range(NEURON_PALETTE)]
-"""
 import copy
 def make_sane_creature(rng, n_input, n_output, n_hidden, margin, world_w, screen_h,
-                        input_color, output_color, hidden_color, n_synapses):
+                        input_color, output_color, n_synapses):
     global neuron_palette
     input_positions = column_positions(n_input, margin, margin, screen_h - margin)
     output_positions = column_positions(n_output, world_w - margin, margin, screen_h - margin)
@@ -101,10 +91,7 @@ def make_sane_creature(rng, n_input, n_output, n_hidden, margin, world_w, screen
         for pos in output_positions
     ]
 
-    hidden_neurons = [
-            
-        ]
-    
+    hidden_neurons = []
     for _ in range(n_hidden):
         hidden_neuron = copy.deepcopy(random.choice(neuron_palette)) 
         hidden_neuron.pos = (random.randint(0,WORLD_W), random.randint(MARGIN,SCREEN_H-MARGIN))
@@ -170,8 +157,7 @@ def reset_creature(creature):
         reset_neuron_state(n)
 
 
-def evaluate(creature, trial_ticks=TRIAL_TICKS, correct_output_index=CORRECT_OUTPUT_INDEX,
-             fire_input_index=FIRE_INPUT_INDEX):
+def evaluate(creature, trial_ticks, correct_output_index, fire_input_index):
     """Run one clean trial: fire an input once, score based on which output fires.
     +1 if the correct output fires, -1 if a wrong output fires first, 0 if neither fires."""
     reset_creature(creature)
@@ -221,18 +207,23 @@ def run_generation(seed_creature, batch_size=BATCH_SIZE, trial_ticks=TRIAL_TICKS
 
     scored.sort(key=lambda x: (x[0], -len(x[1].all_synapses)), reverse=True) # sort by scores first, then the lessity of synapses (so it removes redundancy in the long run)
     return scored
-
+import os
 def run_neat(seed_creature, generations=GENERATIONS, batch_size=BATCH_SIZE, trial_ticks=TRIAL_TICKS,
              pairs=MODULARITY_PAIRS, on_generation=None):
+    global curr_outerneat_gen, curr_creature_index
     """Runs the full generation loop. `on_generation(gen, best_score, best_creature)` is an
     optional callback, e.g. to update the pygame display between generations."""
     best = seed_creature
     history = []
+    os.mkdir(f"saves/gen_{curr_outerneat_gen}/tune_{curr_creature_index}")
     for gen in range(generations):
         scored = run_generation(best, batch_size, trial_ticks, pairs)
         best_score, best = scored[0]
         history.append(best_score)
         print(f"gen {gen:3d}: best fitness = {best_score:+.2f}  (max possible = {len(pairs):+.2f})")
+
+        best.save(f"saves/gen_{curr_outerneat_gen}/tune_{curr_creature_index}/best_tune_gen_{gen}.json")
+        
         if on_generation is not None:
             on_generation(gen, best_score, best, scored)
     return best, history
@@ -277,8 +268,6 @@ heatmap_surf = pygame.Surface((WORLD_W, SCREEN_H), pygame.SRCALPHA)
 show_chem_heatmap = True
 heatmap_channel = 0        # which chemical channel to display
 HEAT_CELL = 20             # px per grid cell
-HEAT_FULL_SCALE = 2.5      # concentration that maps to full brightness (chem_inputs clip at 5)
-HEAT_MIN = 0.03            # don't paint cells fainter than this
 _heat_cx = np.arange(0, WORLD_W, HEAT_CELL) + HEAT_CELL / 2
 _heat_cy = np.arange(0, SCREEN_H, HEAT_CELL) + HEAT_CELL / 2
 _heat_gx, _heat_gy = np.meshgrid(_heat_cx, _heat_cy, indexing="ij")   # shape (nx, ny)
@@ -548,8 +537,7 @@ def on_generation(gen, best_score, best, scored):
         clock.tick(60)
 
 
-# =============== build the seed creature and run NEAT ===============
-
+import os
 
 skeletons = []
 creatures = []
@@ -561,12 +549,12 @@ for curr_outerneat_gen in range(N_OUTERNEAT_GENERATIONS):
     for i in range(N_CREATURES):
         creature, neurons, input_neurons, output_neurons, made, attempts = make_sane_creature(
             rng, N_INPUT, N_OUTPUT, N_HIDDEN, MARGIN, WORLD_W, SCREEN_H,
-            INPUT_COLOR, OUTPUT_COLOR, HIDDEN_COLOR, N_SYNAPSES
+            INPUT_COLOR, OUTPUT_COLOR, N_SYNAPSES
         )
 
         creatures.append([creature, neurons, input_neurons, output_neurons, made, attempts])
 
-
+    os.mkdir(f"saves/gen_{curr_outerneat_gen}")
     for curr_creature_index in range(len(creatures)):
         creature, neurons, input_neurons, output_neurons, made, attempts = creatures[curr_creature_index]
         diagnostics(creature, neurons, output_neurons, made, attempts, N_SYNAPSES)
@@ -575,12 +563,17 @@ for curr_outerneat_gen in range(N_OUTERNEAT_GENERATIONS):
         try:
             best_creature, fitness_history = run_neat(creature, generations=GENERATIONS, batch_size=BATCH_SIZE,
                                                     trial_ticks=TRIAL_TICKS, on_generation=on_generation)
+            
+            best_creature.save(f"saves/gen_{curr_outerneat_gen}/best_of_creature_{curr_creature_index}.json")
+
             skeletons.append([creature, best_creature, fitness_history[-1]])
         except QuitRequested:
             pygame.quit()
             sys.exit()
 
     best_skeleton = max(skeletons,key= lambda x: (x[-1],-len(x[1].all_synapses)))
+
+    best_skeleton[1].save(f"saves/best_creature_gen_{curr_outerneat_gen}.json")
 
     print("best skeleton score: ",best_skeleton[-1])
 
@@ -592,9 +585,13 @@ for curr_outerneat_gen in range(N_OUTERNEAT_GENERATIONS):
 
     creatures = [[best_skeleton[1],neurons,input_neurons,output_neurons,0,0]]
 
+
 best_skeleton = max(skeletons,key= lambda x: (x[-1],-len(x[1].all_synapses)))
 
 creature = best_skeleton[1]
+
+creature.save(f"saves/overall_best_creature.json")
+    
 
 neurons = creature.neurons
 input_neurons = [n for n in neurons if n.is_input_neuron]
@@ -608,7 +605,6 @@ event_log = []
 log(f"loaded creature {current_idx}/{len(population) - 1}  score {pop_scores[current_idx]:+.2f}")
 
 
-# ---------------- interactive playback of the final batch ----------------
 tick_timer = 0.0
 
 while running:
@@ -622,8 +618,6 @@ while running:
             tick_timer -= step
             kick = KICK_EVERY > 0 and tick % KICK_EVERY == 0
             brain_tick(kick=kick)
-            #if tick % 300 == 0:
-            #    reset_creature(creature)  # loop the demo trial so you can watch it repeatedly
 
     draw()
 
