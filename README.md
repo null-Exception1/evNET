@@ -31,9 +31,9 @@ https://github.com/user-attachments/assets/f86d7b4c-cb65-4708-838b-6301881d792a
 - outerNEAT added (NEAT deciding brain's neuron positions)
 - randomizing neuron positions
 - added chemical volume transmission
-- complex gating of neurons as ffd networks with the introduction of chemicals confirmed
+- complex gating of neurons as ffd networks with the introduction of chemicals confirmed, gating is controlked purely by the weights and biases of the ffd, which has proven itself to have complex mechanisms by thorough playground testing. i believe neat can take advantage of this to form complex gates.
 - misfire bug which causes the 2nd input neuron to not be able to recreate the same conditions causing 1st output neuron to fire later after 2nd output neuron firing
-  (still debugging, causes remain unknown)
+  (still debugging, causes remain unknown) but scored perfect in an isolated test somehow
 - confirmed NEAT can treat chemicals one of the fundamental blocks to build brain
 - save features added
 - visual playground added
