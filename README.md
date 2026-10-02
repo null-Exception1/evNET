@@ -35,7 +35,8 @@ https://github.com/user-attachments/assets/f86d7b4c-cb65-4708-838b-6301881d792a
 - misfire bug which causes the 2nd input neuron to not be able to recreate the same conditions causing 1st output neuron to fire later after 2nd output neuron firing
   (still debugging, causes remain unknown)
 - confirmed NEAT can treat chemicals one of the fundamental blocks to build brain
-- save features can add
+- save features added
+- visual playground added
   
 https://github.com/user-attachments/assets/6be12b20-287e-4437-b353-f18433e49876
 
