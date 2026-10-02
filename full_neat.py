@@ -580,7 +580,7 @@ for curr_outerneat_gen in range(N_OUTERNEAT_GENERATIONS):
             pygame.quit()
             sys.exit()
 
-    best_skeleton = max(skeletons,key= lambda x: (x[-1],-len(best_creature.all_synapses)))
+    best_skeleton = max(skeletons,key= lambda x: (x[-1],-len(x[1].all_synapses)))
 
     print("best skeleton score: ",best_skeleton[-1])
 
@@ -592,7 +592,7 @@ for curr_outerneat_gen in range(N_OUTERNEAT_GENERATIONS):
 
     creatures = [[best_skeleton[1],neurons,input_neurons,output_neurons,0,0]]
 
-best_skeleton = max(skeletons,key= lambda x: (x[-1],-len(best_creature.all_synapses)))
+best_skeleton = max(skeletons,key= lambda x: (x[-1],-len(x[1].all_synapses)))
 
 creature = best_skeleton[1]
 

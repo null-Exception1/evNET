@@ -34,11 +34,12 @@ class Creature:
         neuron.chem_inputs *= self.chem_decay
         #print(neuron.chem_inputs)
         for n2 in self.neurons:
+            if not n2.chem_release.any(): continue
             if id(neuron) != id(n2):
                 distance = math.hypot(neuron.pos[0]-n2.pos[0],neuron.pos[1]-n2.pos[1])
                 #print("chem inputs: ",n2.chem_release,", self ticks",self.ticks)
                 neuron.chem_inputs += n2.chem_release * np.exp(-(distance**1) / self.chem_range) * self.chem_amp
-        
+            
         neuron.chem_inputs = np.clip(neuron.chem_inputs,0,5)
 
     def brain_tick(self):

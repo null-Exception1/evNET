@@ -166,8 +166,8 @@ class Neuron:
         self.last_fire_signal = float(a2[0])
 
         fired = bool(a2[0] > self.threshold)
-        if fired and self.potential == 0.0:
-            print("fired without potential ",self.chem_inputs, a2)
+        #if fired and self.potential == 0.0:
+        #    print("fired without potential ",self.chem_inputs, a2)
         if fired:
             self.potential = 0.0
 

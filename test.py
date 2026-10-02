@@ -212,7 +212,6 @@ def unwire(a, b):
 def step():
     global tick
     creature.brain_tick()
-    chem_tick(creature)
     for n in creature.neurons:
         if n.fired:
             flash[id(n)] = 6

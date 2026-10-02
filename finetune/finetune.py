@@ -12,7 +12,7 @@ class Finetune:
         self.batch_size: int = batch_size
 
         self.randomize_synapse_weights = 0.2
-        self.randomize_neuron_wiring = 0.4
+        self.randomize_neuron_wiring = 0.7
         self.create_finetunes()
     @staticmethod
     def delay_from_distance(a, b):
