@@ -14,7 +14,7 @@ SEED = 10
 N_INPUT = 3
 N_OUTPUT = 3
 N_HIDDEN = 10
-N_SYNAPSES = 10
+N_SYNAPSES = 20
 SCREEN_W, SCREEN_H = 1000, 640
 PANEL_W = 260
 WORLD_W = SCREEN_W - PANEL_W
@@ -27,7 +27,7 @@ VELOCITY = 70.0
 
 # --- NEAT / evaluation config ---
 GENERATIONS = 6
-BATCH_SIZE = 100
+BATCH_SIZE = 30
 N_CREATURES = 10
 N_OUTERNEAT_GENERATIONS = 5
 TRIAL_TICKS = 300          # ticks per evaluation trial; keep tight so wasteful routing costs fitness
@@ -64,6 +64,7 @@ def make_sane_neuron(pos, color, rng, is_input=False, is_output=False, max_resam
         n = Neuron(pos, color, rng=rng, is_input_neuron=is_input, is_output_neuron=is_output, **kwargs)
         r = n.sensitivity_report()
         if r["can_fire"] and not n.self_sustains():
+            n.is_inhibitory = False
             return n
     raise RuntimeError(f"couldn't draw a sane neuron after {max_resample} tries")
 
@@ -427,6 +428,8 @@ def text(msg, color=(220, 220, 230), f=font):
 
 def draw():
     global y
+    global curr_creature_index
+    global gen
     screen.fill((8, 8, 14))
     draw_heatmap()
 
@@ -478,7 +481,7 @@ def draw():
     y = 8
 
     text(gen_status, (255, 255, 140))
-    text(f"creature {current_idx}/{len(population) - 1}   score {pop_scores[current_idx]:+.2f}",
+    text(f"creature {curr_creature_index}/{N_CREATURES}",
          (255, 255, 140))
     text(f"tick {tick}   {'PAUSED' if paused else 'running'}")
     text(f"speed {TICKS_PER_SECOND} ticks/s")
@@ -518,7 +521,7 @@ def draw():
 def on_generation(gen, best_score, best, scored):
     """Called by run_neat after every generation: load that generation's best creature
     and animate it for a bit, so evolution is actually visible on screen as it happens."""
-    global population, pop_scores, gen_status, skip_gen_preview
+    global population, pop_scores, gen_status, skip_gen_preview, curr_outerneat_gen
 
     handle_events()
     if not running:
@@ -526,7 +529,7 @@ def on_generation(gen, best_score, best, scored):
 
     population = [c for _, c in scored]
     pop_scores = [s for s, _ in scored]
-    gen_status = f"evolving   gen {gen + 1}/{GENERATIONS}   best {best_score:+.2f}"
+    gen_status = f"evolving   gen {curr_outerneat_gen + 1}/{N_OUTERNEAT_GENERATIONS}   best {best_score:+.2f}"
     load_creature(0)
 
     if fast_forward:
@@ -545,12 +548,12 @@ def on_generation(gen, best_score, best, scored):
         clock.tick(60)
 
 
-# =============== build the seed creature and run NEAT, watching it evolve live ===============
+# =============== build the seed creature and run NEAT ===============
 
 
 skeletons = []
 creatures = []
-for gen in range(N_OUTERNEAT_GENERATIONS):
+for curr_outerneat_gen in range(N_OUTERNEAT_GENERATIONS):
 
     
     print("regenerating a new batch")

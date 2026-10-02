@@ -14,7 +14,7 @@ class Creature:
         self.ticks = 0
         self.chem_decay = 0.7 # manual for now
         self.chem_range = 120
-        self.chem_amp= 1
+        self.chem_amp= 5
     @property
     def all_synapses(self) -> list[Synapse]:
         return [s for n in self.neurons for s in n.outgoing_synapses]
@@ -37,7 +37,7 @@ class Creature:
             if id(neuron) != id(n2):
                 distance = math.hypot(neuron.pos[0]-n2.pos[0],neuron.pos[1]-n2.pos[1])
                 #print("chem inputs: ",n2.chem_release,", self ticks",self.ticks)
-                neuron.chem_inputs += n2.chem_release * np.exp(-(distance**1.2) / self.chem_range) * self.chem_amp
+                neuron.chem_inputs += n2.chem_release * np.exp(-(distance**1) / self.chem_range) * self.chem_amp
         
         neuron.chem_inputs = np.clip(neuron.chem_inputs,0,5)
 

@@ -60,22 +60,52 @@ def chem_tick(creature):
         np.clip(n.chem_inputs, 0.0, clip, out=n.chem_inputs)
 
 
+def make_sane_neuron(pos, color, rng, is_input=False, is_output=False, max_resample=20, **kwargs):
+    for _ in range(max_resample):
+        n = Neuron(pos, color, rng=rng, is_input_neuron=is_input, is_output_neuron=is_output, **kwargs)
+        r = n.sensitivity_report()
+        if r["can_fire"] and not n.self_sustains():
+            return n
+    raise RuntimeError(f"couldn't draw a sane neuron after {max_resample} tries")
+SEED = 10
+random.seed(SEED)
+rng = np.random.default_rng(SEED)
+
+neuron_palette = [make_sane_neuron(pos=(0,0),
+                                   color=(random.randint(0,255),random.randint(0,255),random.randint(0,255)),
+                                   rng=rng,
+                                   threshold_margin=0.15,
+                                   homeostasis_tau=float(rng.uniform(0.5, 0.9)),
+                                   potential_leak=float(rng.uniform(0.1,0.3)),
+                                   spike_leak=float(rng.uniform(0.1,0.3)),
+                                   input_gain=float(rng.uniform(0.5,3)) ) for _ in range(15)]
+
+import copy
 def make_neuron(pos, kind, rng):
     """kind: 'input' | 'output' | 'hidden'. Resamples until sane (can_fire, not self_sustains),
     same guard main.py uses, so the playground can't hand you a permanently dead/pacemaking neuron."""
     is_input = kind == "input"
     is_output = kind == "output"
-    color = INPUT_COLOR if is_input else OUTPUT_COLOR if is_output else HIDDEN_COLOR
-    for _ in range(20):
-        n = Neuron(pos, color, rng=rng, is_input_neuron=is_input, is_output_neuron=is_output,
-                    homeostasis_tau=0.9,
-                    spike_leak=0.2,
-                    potential_leak=0.2,
-                   threshold_margin=0.15, input_gain=0.5)
-        r = n.sensitivity_report()
-        if r["can_fire"] and not n.self_sustains():
-            n.is_inhibitory = False
-            return n
+    n = copy.deepcopy(random.choice(neuron_palette))
+    color = INPUT_COLOR if is_input else OUTPUT_COLOR if is_output else n.color
+    n.color = color
+    n.pos = pos
+    n.rng = rng
+    if is_input:
+        n.is_input_neuron = True
+    if is_output:
+        n.is_output_neuron = True
+    #for _ in range(20):
+
+    #n = Neuron(pos, color, rng=rng, is_input_neuron=is_input, is_output_neuron=is_output,
+    #            homeostasis_tau=0.9,
+    #            spike_leak=0.2,
+    #            potential_leak=0.2,
+    #            threshold_margin=0.15, input_gain=0.5)
+    r = n.sensitivity_report()
+    if r["can_fire"] and not n.self_sustains():
+        n.is_inhibitory = False
+        return n
     raise RuntimeError("couldn't draw a sane neuron after 20 tries")
 
 
@@ -227,7 +257,7 @@ def draw_heatmap():
                 if not np.any(n.chem_release):
                     continue
                 dist = math.hypot(n.pos[0] - cx, n.pos[1] - cy)
-                total += n.chem_release[ch] * math.exp(-(dist**1.2) / controls["chem_range"]) 
+                total += n.chem_release[ch] * math.exp(-(dist) / controls["chem_range"]) 
             if total > 0.01:
                 alpha = int(min(total, 1.0) * 160)
                 pygame.draw.rect(heatmap_surf, (255, 140, 0, alpha), (gx, gy, cell, cell))
