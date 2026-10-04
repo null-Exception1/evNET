@@ -69,7 +69,6 @@ class Creature:
         return np.asarray(a, dtype=float).tolist()
 
     def to_dict(self) -> dict:
-        """Structure only (wiring, weights, delays, chem params) as a JSON-serialisable dict."""
         neurons = self.neurons
         index_of = {id(n): i for i, n in enumerate(neurons)}
 

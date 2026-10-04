@@ -49,7 +49,6 @@ def delay_from_distance(a, b):
 
 
 def column_positions(n, x, y_top, y_bottom):
-    """Evenly space n neurons down a fixed vertical column at x."""
     if n == 1:
         return [(x, (y_top + y_bottom) // 2)]
     step = (y_bottom - y_top) / (n - 1)
@@ -105,7 +104,7 @@ def make_sane_creature(rng, n_input, n_output, n_hidden, margin, world_w, screen
     wireable_targets = hidden_neurons + output_neurons
 
     for n in hidden_neurons:
-        n.is_inhibitory = rng.random() < 0.2  # ~20% inhibitory, a common cortical ratio ballpark
+        n.is_inhibitory = rng.random() < 0.2  # ~20% inhibitory
     for n in input_neurons + output_neurons:
         n.is_inhibitory = False  # excitatory by convention; add_synapse only checks sender.is_inhibitory
 
@@ -186,18 +185,12 @@ def evaluate(creature, trial_ticks, correct_output_index, fire_input_index):
 
 
 def evaluate_multi(creature, trial_ticks=TRIAL_TICKS, pairs=MODULARITY_PAIRS):
-    """Test each (fire_input_index, correct_output_index) pair independently and sum the scores.
-    Each pair gets its own clean trial (evaluate() resets the creature at the start of each call),
-    so results from one pair never leak into another within the same generation's scoring.
-    A shared pathway that helps pair A but fires the wrong output on pair B nets out worse than
-    two properly separated pathways, which is the pressure that should push toward modularity."""
     return sum(evaluate(creature, trial_ticks, correct_index, fire_index)
                for fire_index, correct_index in pairs)
 
 
 def run_generation(seed_creature, batch_size=BATCH_SIZE, trial_ticks=TRIAL_TICKS,
                     pairs=MODULARITY_PAIRS):
-    """One generation: mutate a batch from the parent, score each on ALL pairs, return sorted (score, creature)."""
     tuner = Finetune(seed_creature, batch_size=batch_size)
     scored = [
         (evaluate_multi(c, trial_ticks, pairs), c)
@@ -211,8 +204,6 @@ import os
 def run_neat(seed_creature, generations=GENERATIONS, batch_size=BATCH_SIZE, trial_ticks=TRIAL_TICKS,
              pairs=MODULARITY_PAIRS, on_generation=None):
     global curr_outerneat_gen, curr_creature_index
-    """Runs the full generation loop. `on_generation(gen, best_score, best_creature)` is an
-    optional callback, e.g. to update the pygame display between generations."""
     best = seed_creature
     history = []
     os.mkdir(f"saves/gen_{curr_outerneat_gen}/tune_{curr_creature_index}")
@@ -333,7 +324,6 @@ y = 0
 
 
 def load_creature(idx):
-    """Swap in population[idx] as the creature being visualized, resetting all playback state."""
     global creature, neurons, input_neurons, output_neurons
     global current_idx, tick, fire_history, flash, event_log
 
@@ -352,7 +342,6 @@ def load_creature(idx):
 
 
 def brain_tick(kick=False):
-    """One full creature step, plus a manual kick on an input neuron."""
     global tick
 
     for n in input_neurons:
@@ -379,7 +368,6 @@ def brain_tick(kick=False):
 
 
 def handle_events():
-    """Pump the pygame event queue and apply whatever key/quit the user made."""
     global running, paused, TICKS_PER_SECOND, skip_gen_preview, fast_forward, show_chem_heatmap
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
